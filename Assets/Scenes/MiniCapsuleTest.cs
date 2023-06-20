@@ -73,24 +73,32 @@ public class MiniCapsuleTest : MonoBehaviour
                 if (Fisica.RayoContraCapsula(rayo, centro, columna, radioCapsula, radioColumna, ref rayoHit))
                 {
                     using (new Handles.DrawingScope(Color.white))
-                        Handles.DrawWireDisc(rayoHit, esto.transform.forward, radioCapsula, 2f);
+                        Handles.DrawWireDisc(rayoHit, esto.transform.forward, handSize*0.3f, 2f);
                 }
 
                 Handles.DrawDottedLine(centro + columna * 1000f, centro - columna * 1000f, 5f);
-                
+
                 using (new Handles.DrawingScope(Color.white))
                     Handles.DrawDottedLine(rayo.origin + rayo.direction * 1000f, rayo.origin - rayo.direction * 1000f, 5f);
 
-                var crossEspinaRayo = ((columna.x)*(puntoBuscadoLocal.y) - (columna.y)*(puntoBuscadoLocal.x));
-                var crossEspinaRayoDir = (columna.x*rayo.direction.y)-(columna.y*rayo.direction.x);
-                var lado = crossEspinaRayoDir < 0f ^ Mathf.Abs(crossEspinaRayo)<radioCapsula;
-                Handles.DrawLine(centro + columna * 1000f + perpColumna * radioCapsula, centro - columna * 1000f + perpColumna * radioCapsula, lado? 5f:1f);
-                Handles.DrawLine(centro + columna * 1000f - perpColumna * radioCapsula, centro - columna * 1000f - perpColumna * radioCapsula, !lado? 5f:1f);
+                var crossEspinaRayo = ((columna.x) * (puntoBuscadoLocal.y) - (columna.y) * (puntoBuscadoLocal.x));
+                var crossEspinaRayoDir = (columna.x * rayo.direction.y) - (columna.y * rayo.direction.x);
 
-                Handles.DrawWireDisc(centro + columna * radioColumna, esto.transform.forward, radioCapsula);
-                Handles.DrawWireDisc(centro - columna * radioColumna, esto.transform.forward, radioCapsula);
+                if (radioCapsula != 0f)
+                {
+                    Handles.DrawLine(centro + columna * 1000f + perpColumna * radioCapsula, centro - columna * 1000f + perpColumna * radioCapsula);
+                    Handles.DrawLine(centro + columna * 1000f - perpColumna * radioCapsula, centro - columna * 1000f - perpColumna * radioCapsula);
 
-                Handles.DrawSolidDisc(puntoProyectado + centro, esto.transform.forward, handSize);
+                    Handles.DrawWireDisc(centro + columna * radioColumna, esto.transform.forward, radioCapsula);
+                    Handles.DrawWireDisc(centro - columna * radioColumna, esto.transform.forward, radioCapsula);
+                }
+                else
+                {
+                    Handles.DrawLine(centro + columna * radioColumna + perpColumna * radioCapsula, centro - columna * radioColumna + perpColumna * radioCapsula, 3f);
+                    Handles.DrawLine(centro + columna * radioColumna - perpColumna * radioCapsula, centro - columna * radioColumna - perpColumna * radioCapsula, 3f);
+                }
+
+                // Handles.DrawSolidDisc(puntoProyectado + centro, esto.transform.forward, handSize);
             }
 
             using (new Handles.DrawingScope(esto.transform.localToWorldMatrix))
@@ -98,12 +106,12 @@ public class MiniCapsuleTest : MonoBehaviour
                 using (var change = new EditorGUI.ChangeCheckScope())
                 {
                     var nuevoOrigPuntoLocal = (Vector2)Handles.Slider2D(esto.transform.InverseTransformPoint(esto._origenPuntoGlobal), esto.transform.forward, esto.transform.up, esto.transform.right, handSize, Handles.SphereHandleCap, Vector2.zero);
-                    var nuevoRayo = (Vector2)Handles.Slider2D(nuevoOrigPuntoLocal+esto._vectorDeSalida.normalized, esto.transform.forward, esto.transform.up, esto.transform.right, handSize, Handles.CircleHandleCap, Vector2.zero);
+                    var nuevoRayo = (Vector2)Handles.Slider2D(nuevoOrigPuntoLocal + esto._vectorDeSalida.normalized, esto.transform.forward, esto.transform.up, esto.transform.right, handSize, Handles.CircleHandleCap, Vector2.zero);
                     if (change.changed)
                     {
                         Undo.RecordObject(esto, "Movio punto origen");
                         esto._origenPuntoGlobal = esto.transform.TransformPoint(nuevoOrigPuntoLocal);
-                        esto._vectorDeSalida = (nuevoRayo-nuevoOrigPuntoLocal).normalized;
+                        esto._vectorDeSalida = (nuevoRayo - nuevoOrigPuntoLocal).normalized;
                     }
                 }
             }

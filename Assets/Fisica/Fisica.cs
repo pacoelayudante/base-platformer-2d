@@ -265,7 +265,7 @@ public static class Fisica
 
     // Unity's Mathf.cs
     // Infinite Line Intersection (line1 is p1-p2 and line2 is p3-p4)
-    public static bool LineIntersection(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, ref Vector2 result)
+    public static bool LineLineIntersection(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, ref Vector2 result)
     {
         float bx = p2.x - p1.x;
         float by = p2.y - p1.y;
@@ -287,7 +287,7 @@ public static class Fisica
 
     // Unity's Mathf.cs
     // Line Segment Intersection (line1 is p1-p2 and line2 is p3-p4)
-    public static bool LineSegmentIntersection(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, ref Vector2 result)
+    public static bool SegmentSegmentIntersection(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, ref Vector2 result)
     {
         float bx = p2.x - p1.x;
         float by = p2.y - p1.y;
@@ -316,11 +316,36 @@ public static class Fisica
         return true;
     }
 
-    // Unity's Mathf.cs
+    // Unity's Mathf.cs (modificado para que sea realmente un segmento y una linea)
     // Line Segment Intersection (line1 is p1-p2 and line2 is p3-p4)
-    public static bool LineCircleIntersection(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, ref Vector2 result)
+    public static bool SegmentLineIntersection(Vector2 segment1, Vector2 segment2, Vector2 line1, Vector2 line2, ref Vector2 result)
     {
-        return false;
+        float bx = segment2.x - segment1.x;
+        float by = segment2.y - segment1.y;
+        float dx = line2.x - line1.x;
+        float dy = line2.y - line1.y;
+        float bDotDPerp = bx * dy - by * dx;
+        if (bDotDPerp == 0)
+        {
+            return false;
+        }
+        float cx = line1.x - segment1.x;
+        float cy = line1.y - segment1.y;
+        float t = (cx * dy - cy * dx) / bDotDPerp;
+        if (t < 0 || t > 1)
+        {
+            return false;
+        }
+        // igual que segment-segment pero sin limitar el segundo
+        // float u = (cx * by - cy * bx) / bDotDPerp;
+        // if (u < 0 || u > 1)
+        // {
+        //     return false;
+        // }
+
+        result.x = segment1.x + t * bx;
+        result.y = segment1.y + t * by;
+        return true;
     }
 
     // Unity's Mathf.cs
@@ -421,79 +446,164 @@ public static class Fisica
     /// </summary>
     ///<returns>Devuelve global sobre la superficie de la capsula</returns>
     // public static bool RayAgainstCapsule(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, ref Vector2 result)
+    static object llaveRayoContraCapsulaInspectKey = new object();
     public static bool RayoContraCapsula(Ray2D rayo, Vector2 centroCapsula, Vector2 vectorEspinal, float radioDeCapsula, float mediaLongitudEspinal, ref Vector2 result)
     {
+        Plasmar.Tarjeta tarjeta = Plasmar.GetTarjeta(llaveRayoContraCapsulaInspectKey);
+        tarjeta.DataCruda.Clear();
+
         var perpEspinal = Vector2.Perpendicular(vectorEspinal);
-        var origenRayoLocal = centroCapsula-rayo.origin;
+        var origenRayoLocal = rayo.origin - centroCapsula;
 
-        var centroDeSegmentoLateralCercano = centroCapsula;
+        var crossEspinaOrigenRayo = (origenRayoLocal.x) * (vectorEspinal.y) - (origenRayoLocal.y) * (vectorEspinal.x);
+        var crossEspinaDirRayo = (vectorEspinal.x * rayo.direction.y) - (vectorEspinal.y * rayo.direction.x);
 
-        // bool dentroDeRiel = 
-        var crossEspinaRayo = (vectorEspinal.x)*(origenRayoLocal.y) - (vectorEspinal.y)*(origenRayoLocal.x);
-        var crossEspinaRayoDir = (vectorEspinal.x*rayo.direction.y)-(vectorEspinal.y*rayo.direction.x);
+        // usado solo cuando se chequea contra circulo final (indica si queremos el arco cercano el lejano)
+        var extremoDelCirculo = -1f;
 
-        if (radioDeCapsula > 0f) // si el radio es menor que cero, la capsula es un segmento
+        tarjeta.DataCruda.Add(("crossEspinaOrigenRayo", crossEspinaOrigenRayo.ToString()));
+        tarjeta.DataCruda.Add(("crossEspinaDirRayo", crossEspinaDirRayo.ToString()));
+
+        if (radioDeCapsula > 0f) // el radio tiene que ser mayor a cero, sino es solo un segmento (ver el else)
         {
-            // emm lo que estoy haciendo acá es detectar de que lado esta el origen del rayo
-            // y agarrar el segmento espinal y desplazarlo perpendicularmente hasta el lado de la capsula
-            // de esa manera ya puedo estar seguro si el rayo cae sobre uno de los circulos o sobre uno de los lados
-            var crossProdOrigenRayo = ((vectorEspinal.x) * (rayo.origin.y - centroCapsula.y) - (vectorEspinal.y) * (rayo.origin.x - centroCapsula.x));
-            // si el cross es == 0f, tonces es colinear
-            var magnitudOffset = crossProdOrigenRayo > 0f ? radioDeCapsula : -radioDeCapsula;
-            centroDeSegmentoLateralCercano.x += -vectorEspinal.y * magnitudOffset;
-            centroDeSegmentoLateralCercano.y += vectorEspinal.x * magnitudOffset;
+            if (mediaLongitudEspinal == 0f) // y si la espina es cero, la capsula es un circulo
+            {
+                // interseccion rayo-circulo!
+
+                //dentroDeCapsula == true, sencillamente chequeando distancia contra radio
+            }
+
+            bool ladoPositivoColumna = crossEspinaOrigenRayo > radioDeCapsula;
+            bool ladoNegativoColumna = crossEspinaOrigenRayo < -radioDeCapsula;
+            if (ladoPositivoColumna || ladoNegativoColumna) // estoy fuera de columna
+            {
+                tarjeta.DataCruda.Add(("fuera de columna", null));
+                if ((crossEspinaDirRayo > 0f) ^ (crossEspinaOrigenRayo > 0f))
+                {
+                    // el origen esta de un lado y el rayo apunta hacia "afuera" de la columna
+                    tarjeta.DataCruda.Add(("rayo apunta para otro lado", null));
+                    return false;
+                }
+
+                // ya que estoy fuera de la columna principal
+                // puedo hacer esto para hacer como un offset
+                // de la espina, y hacer un chequeo del segmento
+                // que corresponde a que lado estoy de la columna
+                // este chequeo se realiza abajo del todo (mismo flow que si la capsula fuera radio cero)
+                crossEspinaOrigenRayo += ladoNegativoColumna ? radioDeCapsula : -radioDeCapsula;
+            }
+            else
+            {
+                // estoy dentro de la columna, primero me fijo si estoy tocando el circulo "mas cercano"
+                tarjeta.DataCruda.Add(("rayo contra apuntado", null));
+                var dotEspinaDirRayo = Vector2.Dot(rayo.direction, vectorEspinal);
+
+                var circuloCercano = vectorEspinal * (dotEspinaDirRayo < 0f ? +mediaLongitudEspinal : -mediaLongitudEspinal) - origenRayoLocal;
+                tarjeta.DataCruda.Add(("dotEspinaDirRayo", dotEspinaDirRayo.ToString()));
+                tarjeta.DataCruda.Add(("circulo cercano", circuloCercano.ToString()));
+
+                var dotCirculoCercanoDirRayo = Vector2.Dot(circuloCercano, rayo.direction);
+
+                var distInternaSq = circuloCercano.sqrMagnitude - dotCirculoCercanoDirRayo * dotCirculoCercanoDirRayo;
+                var radioSq = radioDeCapsula * radioDeCapsula;
+                if (distInternaSq > radioSq)
+                {
+                    tarjeta.DataCruda.Add(("sin interseccion", null));
+                }
+                else
+                {
+                    var distExterna = dotCirculoCercanoDirRayo - Mathf.Sqrt(radioSq - distInternaSq);
+
+                    if (distExterna > 0f)
+                    {
+                        result = rayo.origin + rayo.direction * distExterna;
+                        return true;
+                    }
+                    else
+                    {
+                        tarjeta.DataCruda.Add(("interseccion en lado interno", null));
+                    }
+                }
+
+                // que hacer respecto al alerta, meter lo anterior en una misma branch "true"
+                // ya resolver la interseccion lado interno + sin interseccion para el caso de seguir
+                // generar offset basado en cross dir
+                crossEspinaOrigenRayo += crossEspinaDirRayo > 0f ? radioDeCapsula : -radioDeCapsula;
+                if (crossEspinaDirRayo == 0f) crossEspinaOrigenRayo *= -1f;// rayo paralelo a espina
+                extremoDelCirculo = 1f;
+
+            }
+        }
+        else if (mediaLongitudEspinal == 0f) // si la espina es cero (y el radio tambien), la capsula es un punto
+        {
+            // emm...
+            return false; // creo que podemos asumir que nunca la va a tocar (aunque eso no esta del todo bien)
+            // podria fijarme si el origen es igual al centro... o algo asi
+            // if (rayo.origin == centroCapsula) return true;
+        }
+        else // (esto es un segmento)
+        {
+            if (crossEspinaOrigenRayo == 0f) // el origen del rayo es colinear a la columna!
+            { // puede haber colision (ver abajo)
+                // if (origen tocando segmento) // return true
+                // else if (dir rayo paralelo  a columna, y apuntando hacia centro de segmento) // return true
+                // else (no toca y apunta para el otro lado, o direccion no es paralela a segmento)
+                tarjeta.DataCruda.Add(("origen colineal", null));
+                return false;
+            }
+            else if (crossEspinaDirRayo == 0f)
+            { // rayo es paralelo y origen no sobre la lina del segmento
+                tarjeta.DataCruda.Add(("rayo paralelo, origen no colineal", null));
+                return false;
+            }
+            else if ((crossEspinaDirRayo > 0f) ^ (crossEspinaOrigenRayo > 0f))
+            { // el origen esta de un lado y el rayo apunta hacia "afuera" del segmento
+                tarjeta.DataCruda.Add(("rayo apunta para otro lado", null));
+                return false;
+            }
         }
 
-        var p1 = centroDeSegmentoLateralCercano + vectorEspinal * mediaLongitudEspinal;
-        var p2 = centroDeSegmentoLateralCercano - vectorEspinal * mediaLongitudEspinal;
-        var p3 = rayo.origin;
-        var p4 = rayo.origin + rayo.direction;
+        // tiene radio, y o bien ya chequeamos si esta adentro, o esta afuera
 
-        float bx = p2.x - p1.x;
-        float by = p2.y - p1.y;
-        float dx = p4.x - p3.x;
-        float dy = p4.y - p3.y;
-        float bDotDPerp = bx * dy - by * dx;
-        if (bDotDPerp == 0) // chequeo si son paralelos
+        // rayo vs segmento, veamos si puedo aprovechar las variables ya definidas
+        tarjeta.DataCruda.Add(("rayo-segmento posible", null));
+
+        // este calculo seguro se puede mejorar, sobretodo esa parte de dot espina cross espina
+        // crossEspinaOrigenRayo es un escalar
+        var nuevaPos = origenRayoLocal + rayo.direction * crossEspinaOrigenRayo / crossEspinaDirRayo;
+        var dotColumna = Vector2.Dot(nuevaPos, vectorEspinal);
+        tarjeta.DataCruda.Add(("dotColumna", dotColumna.ToString()));
+        bool trasExtremoPositivo = dotColumna > mediaLongitudEspinal;
+        bool trasExtremoNegativo = dotColumna < -mediaLongitudEspinal;
+        if (trasExtremoPositivo || trasExtremoNegativo)
         {
+            tarjeta.DataCruda.Add(("interseccion cae fuera de segmento", null));
+
+            if (radioDeCapsula > 0f)
+            {
+                var circuloCercano = vectorEspinal * (trasExtremoPositivo ? +mediaLongitudEspinal : -mediaLongitudEspinal) - origenRayoLocal;
+                tarjeta.DataCruda.Add(("probando contra circulo", circuloCercano.ToString()));
+                var dotCirculoCercanoDirRayo = Vector2.Dot(circuloCercano, rayo.direction);
+                var distInternaSq = circuloCercano.sqrMagnitude - dotCirculoCercanoDirRayo * dotCirculoCercanoDirRayo;
+                var radioSq = radioDeCapsula * radioDeCapsula;
+                if (distInternaSq > radioSq)
+                {
+                    tarjeta.DataCruda.Add(("sin interseccion", null));
+                    return false;
+                }
+
+                var distExterna = dotCirculoCercanoDirRayo + Mathf.Sqrt(radioSq - distInternaSq) * extremoDelCirculo;
+                if (distExterna > 0f)
+                {
+                    result = rayo.origin + rayo.direction * distExterna;
+                    return true;
+                }
+            }
+
             return false;
         }
 
-        float cx = p3.x - p1.x;
-        float cy = p3.y - p1.y;
-
-        float u = (cx * by - cy * bx) / bDotDPerp;
-        // u = Mathf.Clamp(u,0f,1f);
-        // if (u < 0) // rayo apunta para el otro lado (seguro puedo hacer este return antes si pienso un poco)
-        // {
-        //     return false;
-        // }
-
-        float t = (cx * dy - cy * dx) / bDotDPerp;
-        // t = Mathf.Clamp(t, 0f, 1f); // limito rayo los extremos, 
-        if (t < 0 || t > 1) // la interseccion cae fuera del segmento espinal (aun debo chequear la distancia con el circulo)
-        {
-            // return false;
-            var circuloCercano = centroCapsula + vectorEspinal * mediaLongitudEspinal * (t <= 0?1:-1) - rayo.origin;
-            var proyectado = Vector2.Dot(circuloCercano, rayo.direction);
-            var distInternaSq = circuloCercano.sqrMagnitude-proyectado*proyectado;
-            var radioSq = radioDeCapsula*radioDeCapsula;
-            if (distInternaSq > radioSq)
-                return false;
-
-            var distExterna = proyectado-Mathf.Sqrt(radioSq-distInternaSq);
-            // if (distExterna > 0f)
-            {
-                result = rayo.origin + rayo.direction * distExterna;
-                return true;
-            }
-            // else return false;
-        }
-
-        result.x = p1.x + t * bx;
-        result.y = p1.y + t * by;
+        result = nuevaPos + centroCapsula;
         return true;
     }
-
-    
 }
